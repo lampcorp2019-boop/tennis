@@ -2,6 +2,9 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
+<!-- 静的ホスティングではGASの addMetaTag が効かないので、ここに必ず持たせる。
+     これが無いとスマホが幅980pxのPCサイトとみなして全体を縮小表示する。 -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>テニス 出欠</title>
 <style>
   :root {
@@ -87,7 +90,15 @@
   .modal .m-date { font-size: 17px; font-weight: 700; }
   .modal .m-place { font-size: 14px; color: var(--muted); margin-top: 2px; }
   .modal .m-msg { font-size: 15px; margin-top: 14px; }
-  .modal .m-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .modal .m-comment {
+    display: block; width: 100%; margin-top: 12px;
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+    /* iOSは16px未満の入力欄にフォーカスすると勝手に拡大するので16pxを下回らせない */
+    font: inherit; font-size: 16px; color: var(--text); background: #fff;
+    resize: none;
+  }
+  .modal .m-comment:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .modal .m-actions { display: flex; gap: 10px; margin-top: 16px; }
   .modal .m-actions button {
     flex: 1; border-radius: 10px; padding: 12px; font-size: 15px; font-weight: 700;
     border: 0; cursor: pointer;
@@ -132,6 +143,8 @@
     <div class="m-date" id="mDate"></div>
     <div class="m-place" id="mPlace"></div>
     <div class="m-msg">参加で申し込みます。よろしいですか？</div>
+    <textarea id="mComment" class="m-comment" rows="2" maxlength="100"
+              placeholder="備考（任意・100文字まで）"></textarea>
     <div class="m-actions">
       <button class="cancel" id="mCancel">やめる</button>
       <button class="ok" id="mOk">申し込む</button>
@@ -306,7 +319,7 @@
 
       var date = document.createElement('div');
       date.className = 'date';
-      date.textContent = formatDate(ev.date, ev.weekday) + ' ' + ev.start_time;
+      date.textContent = formatDate(ev.date, ev.weekday) + ' ' + timeRange(ev);
       card.appendChild(date);
 
       if (ev.place) {
@@ -364,11 +377,17 @@
     return Number(p[1]) + '/' + Number(p[2]) + '(' + weekday + ')';
   }
 
+  // 「20:00〜22:00」。終了時刻が未入力なら開始時刻のみ。
+  function timeRange(ev) {
+    return ev.end_time ? ev.start_time + '〜' + ev.end_time : ev.start_time;
+  }
+
   // ---- 確認ダイアログ ----
   function openConfirm(ev) {
     pendingEvent = ev;
-    $('mDate').textContent = formatDate(ev.date, ev.weekday) + ' ' + ev.start_time;
+    $('mDate').textContent = formatDate(ev.date, ev.weekday) + ' ' + timeRange(ev);
     $('mPlace').textContent = ev.place || '';
+    $('mComment').value = '';
     $('mOk').disabled = false;
     $('overlay').hidden = false;
   }
@@ -383,9 +402,10 @@
   $('mOk').addEventListener('click', function () {
     if (!pendingEvent) return;
     var ev = pendingEvent;
+    var comment = $('mComment').value;
     $('mOk').disabled = true;
 
-    api({ action: 'apply', event_id: ev.event_id })
+    api({ action: 'apply', event_id: ev.event_id, comment: comment })
       .then(function (data) {
         closeConfirm();
         if (data.ok) {
