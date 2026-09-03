@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>テニス 出欠</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --text: #1c1e21;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #06c755;      /* LINE green */
+    --accent-press: #05a648;
+    --full: #9ca3af;
+    --danger: #d93025;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    font-size: 16px; line-height: 1.5;
+  }
+  header {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px calc(14px + env(safe-area-inset-top));
+    background: var(--card); border-bottom: 1px solid var(--line);
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: 700; }
+  header .who { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .close-btn {
+    flex: none; border: 1px solid var(--line); background: #fff; color: var(--muted);
+    border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer;
+  }
+  main { padding: 12px 16px calc(28px + env(safe-area-inset-bottom)); }
+
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 12px;
+  }
+  .date { font-size: 18px; font-weight: 700; letter-spacing: .01em; }
+  .place { font-size: 14px; color: var(--muted); margin-top: 2px; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 6px; white-space: pre-wrap; }
+  .count {
+    display: flex; align-items: baseline; gap: 8px;
+    margin-top: 10px; font-size: 15px;
+  }
+  .count b { font-size: 20px; font-weight: 700; }
+  .count .full-tag {
+    font-size: 13px; font-weight: 700; color: #fff; background: var(--full);
+    border-radius: 999px; padding: 2px 10px;
+  }
+  .btn {
+    display: block; width: 100%; margin-top: 12px;
+    border: 0; border-radius: 10px; padding: 13px;
+    font-size: 16px; font-weight: 700; color: #fff; background: var(--accent);
+    cursor: pointer;
+  }
+  .btn:active { background: var(--accent-press); }
+  .btn[disabled] { background: #dcdfe3; color: #9aa0a6; cursor: default; }
+
+  .state {
+    padding: 40px 16px; text-align: center; color: var(--muted); font-size: 14px;
+  }
+  .state.error { color: var(--danger); }
+  #errorMsg {
+    white-space: pre-wrap; text-align: left; font-size: 13px; line-height: 1.7;
+    word-break: break-all;
+  }
+  .state .retry {
+    margin-top: 14px; border: 1px solid var(--line); background: #fff; color: var(--text);
+    border-radius: 8px; padding: 9px 18px; font-size: 14px; cursor: pointer;
+  }
+
+  /* 確認ダイアログ */
+  .overlay {
+    position: fixed; inset: 0; z-index: 20;
+    background: rgba(0,0,0,.45);
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .modal {
+    background: #fff; border-radius: 14px; padding: 20px; width: 100%; max-width: 340px;
+  }
+  .modal .m-date { font-size: 17px; font-weight: 700; }
+  .modal .m-place { font-size: 14px; color: var(--muted); margin-top: 2px; }
+  .modal .m-msg { font-size: 15px; margin-top: 14px; }
+  .modal .m-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .modal .m-actions button {
+    flex: 1; border-radius: 10px; padding: 12px; font-size: 15px; font-weight: 700;
+    border: 0; cursor: pointer;
+  }
+  .modal .cancel { background: #eef0f2; color: var(--text); }
+  .modal .ok { background: var(--accent); color: #fff; }
+  .modal .ok[disabled] { background: #a8e3c1; }
+
+  /* トースト */
+  .toast {
+    position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom));
+    transform: translateX(-50%); z-index: 30;
+    background: rgba(28,30,33,.94); color: #fff;
+    padding: 12px 20px; border-radius: 999px; font-size: 14px; max-width: 88vw;
+    text-align: center;
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>テニス 出欠</h1>
+    <div class="who" id="who"></div>
+  </div>
+  <button class="close-btn" id="closeBtn" hidden>閉じる</button>
+</header>
+
+<main>
+  <div class="state" id="loading">読み込み中…</div>
+  <div class="state error" id="error" hidden>
+    <div id="errorMsg"></div>
+    <button class="retry" id="retryBtn">再読み込み</button>
+  </div>
+  <div id="list" hidden></div>
+  <div class="state" id="empty" hidden>予定されているイベントはありません。</div>
+</main>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="modal">
+    <div class="m-date" id="mDate"></div>
+    <div class="m-place" id="mPlace"></div>
+    <div class="m-msg">参加で申し込みます。よろしいですか？</div>
+    <div class="m-actions">
+      <button class="cancel" id="mCancel">やめる</button>
+      <button class="ok" id="mOk">申し込む</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+  var LIFF_ID = '★ここにLIFF IDを貼る★';   // 例: 2007123456-AbCdEfGh
+  var API_URL = 'https://script.google.com/macros/s/AKfycbz-7-ACFdVKwR4Ch1a_p4vGamLEoAcMeGafyjj7govncIQWhZyUyU0mx546uFl9ajvZ/exec';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var pendingEvent = null;
+
+  // どこで止まったかを画面に出す。無言で「読み込み中」のまま固まらせない。
+  var stage = '起動中';
+  var watchdog = null;
+
+  function setStage(s) {
+    stage = s;
+    var el = $('loading');
+    if (el && !el.hidden) el.textContent = s + '…';
+  }
+
+  function armWatchdog() {
+    clearWatchdog();
+    watchdog = setTimeout(function () {
+      showError('応答がありません。\n\n止まった段階: ' + stage +
+                '\n通信方式: ' + transportName() +
+                '\n接続先: ' + (API_URL || '(未設定)'));
+    }, 20000);
+  }
+  function clearWatchdog() {
+    if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+  }
+
+  function msg(err) {
+    if (!err) return '(詳細不明)';
+    return err.message || err.toString() || String(err);
+  }
+
+  // Promise の外で落ちたエラーも拾う
+  window.addEventListener('error', function (ev) {
+    showError('[' + stage + '] スクリプトエラー\n' + (ev.message || ''));
+  });
+  window.addEventListener('unhandledrejection', function (ev) {
+    showError('[' + stage + '] 未処理のエラー\n' + msg(ev.reason));
+  });
+
+  // ---- 起動 ----
+  boot();
+
+  function boot() {
+    if (typeof liff === 'undefined') {
+      showError('LIFF SDKを読み込めませんでした。通信環境を確認してください。');
+      return;
+    }
+    if (!LIFF_ID) { showError('LIFF_ID が設定されていません。'); return; }
+
+    setStage('LIFFを初期化中');
+    armWatchdog();
+
+    liff.init({ liffId: LIFF_ID })
+      .then(function () {
+        setStage('ログインを確認中');
+        if (!liff.isLoggedIn()) {
+          setStage('LINEログインへ移動します');
+          liff.login();
+          return null;
+        }
+        if (!liff.getIDToken()) {
+          // openid スコープが無いとここに来る
+          setStage('IDトークンを取得できません（openidスコープ未付与の可能性）');
+          liff.login();
+          return null;
+        }
+        $('closeBtn').hidden = !liff.isInClient();
+        return load();
+      })
+      .catch(function (err) {
+        showError('[' + stage + '] LIFFの初期化に失敗しました。\n' + msg(err));
+      });
+  }
+
+  // ---- API ----
+
+  // GASが配信しているページでは google.script.run が使える。
+  // fetch と違い、サンドボックスiframeから別オリジンへPOSTしないので
+  // CORSもリダイレクトも経由しない（LINE内ブラウザで詰まらない）。
+  function useGasBridge() {
+    return typeof google !== 'undefined' && google.script && google.script.run;
+  }
+  function transportName() {
+    return useGasBridge() ? 'google.script.run' : 'fetch';
+  }
+
+  function api(payload) {
+    var idToken = liff.getIDToken();
+    if (!idToken) {
+      // openid スコープの同意が無い / トークン失効
+      liff.login();
+      return Promise.reject(new Error('ログインが必要です（IDトークンが取得できません）'));
+    }
+    payload.idToken = idToken;
+
+    if (useGasBridge()) {
+      return new Promise(function (resolve, reject) {
+        google.script.run
+          .withSuccessHandler(function (s) {
+            try { resolve(JSON.parse(s)); }
+            catch (e) { reject(new Error('応答を解釈できません: ' + String(s).slice(0, 200))); }
+          })
+          .withFailureHandler(function (e) {
+            reject(new Error('サーバー処理でエラー: ' + msg(e)));
+          })
+          .apiCall(JSON.stringify(payload));
+      });
+    }
+
+    if (!API_URL) return Promise.reject(new Error('API_URL が未設定です'));
+
+    return fetch(API_URL, {
+      method: 'POST',
+      // text/plain にすることで CORS プリフライトを起こさない
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      if (!res.ok) throw new Error('サーバーエラー (HTTP ' + res.status + ')');
+      return res.json();
+    });
+  }
+
+  function load() {
+    showLoading();
+    setStage('一覧を取得中（' + transportName() + '）');
+    armWatchdog();
+    return api({ action: 'list' })
+      .then(function (data) {
+        if (!data.ok) {
+          if (data.error === 'invalid_token') { liff.login(); return; }
+          throw new Error(errorText(data.error));
+        }
+        $('who').textContent = data.me && data.me.name ? data.me.name + ' さん' : '';
+        render(data.events || []);
+      })
+      .catch(function (err) { showError('[' + stage + ']\n' + msg(err)); });
+  }
+
+  // ---- 描画 ----
+  function render(events) {
+    clearWatchdog();
+    $('loading').hidden = true;
+    $('error').hidden = true;
+
+    var list = $('list');
+    list.innerHTML = '';
+
+    if (!events.length) {
+      list.hidden = true;
+      $('empty').hidden = false;
+      return;
+    }
+    $('empty').hidden = true;
+    list.hidden = false;
+
+    events.forEach(function (ev) {
+      var card = document.createElement('div');
+      card.className = 'card';
+
+      var date = document.createElement('div');
+      date.className = 'date';
+      date.textContent = formatDate(ev.date, ev.weekday) + ' ' + ev.start_time;
+      card.appendChild(date);
+
+      if (ev.place) {
+        var place = document.createElement('div');
+        place.className = 'place';
+        place.textContent = ev.place;
+        card.appendChild(place);
+      }
+
+      var count = document.createElement('div');
+      count.className = 'count';
+      var num = document.createElement('b');
+      if (ev.capacity === null || ev.capacity === undefined) {
+        num.textContent = ev.confirmed + '名';
+        count.appendChild(document.createTextNode('参加'));
+        count.appendChild(num);
+      } else {
+        num.textContent = ev.confirmed + ' / ' + ev.capacity;
+        count.appendChild(num);
+        count.appendChild(document.createTextNode('名'));
+        if (ev.is_full) {
+          var tag = document.createElement('span');
+          tag.className = 'full-tag';
+          tag.textContent = '満員';
+          count.appendChild(tag);
+        }
+      }
+      card.appendChild(count);
+
+      if (ev.note) {
+        var note = document.createElement('div');
+        note.className = 'note';
+        note.textContent = ev.note;
+        card.appendChild(note);
+      }
+
+      var btn = document.createElement('button');
+      btn.className = 'btn';
+      if (ev.is_full) {
+        btn.textContent = '満員';
+        btn.disabled = true;
+      } else {
+        btn.textContent = '参加する';
+        btn.addEventListener('click', function () { openConfirm(ev); });
+      }
+      card.appendChild(btn);
+
+      list.appendChild(card);
+    });
+  }
+
+  function formatDate(iso, weekday) {
+    var p = String(iso).split('-');
+    if (p.length !== 3) return iso;
+    return Number(p[1]) + '/' + Number(p[2]) + '(' + weekday + ')';
+  }
+
+  // ---- 確認ダイアログ ----
+  function openConfirm(ev) {
+    pendingEvent = ev;
+    $('mDate').textContent = formatDate(ev.date, ev.weekday) + ' ' + ev.start_time;
+    $('mPlace').textContent = ev.place || '';
+    $('mOk').disabled = false;
+    $('overlay').hidden = false;
+  }
+
+  function closeConfirm() {
+    $('overlay').hidden = true;
+    pendingEvent = null;
+  }
+
+  $('mCancel').addEventListener('click', closeConfirm);
+
+  $('mOk').addEventListener('click', function () {
+    if (!pendingEvent) return;
+    var ev = pendingEvent;
+    $('mOk').disabled = true;
+
+    api({ action: 'apply', event_id: ev.event_id })
+      .then(function (data) {
+        closeConfirm();
+        if (data.ok) {
+          toast('申し込みました');
+        } else if (data.error === 'already_applied') {
+          // エラー扱いにしない（申込済みかを確認する手段でもある）
+          toast('すでに申し込み済みです');
+        } else if (data.error === 'invalid_token') {
+          liff.login();
+          return;
+        } else {
+          toast(errorText(data.error));
+        }
+        return load();
+      })
+      .catch(function (err) {
+        closeConfirm();
+        toast(err.message || String(err));
+      });
+  });
+
+  $('closeBtn').addEventListener('click', function () {
+    if (liff.isInClient()) liff.closeWindow();
+  });
+
+  $('retryBtn').addEventListener('click', load);
+
+  // ---- 表示ヘルパー ----
+  function showLoading() {
+    $('loading').hidden = false;
+    $('loading').textContent = stage + '…';
+    $('error').hidden = true;
+    $('empty').hidden = true;
+    $('list').hidden = true;
+  }
+
+  function showError(text) {
+    clearWatchdog();
+    $('loading').hidden = true;
+    $('list').hidden = true;
+    $('empty').hidden = true;
+    $('errorMsg').textContent = text;
+    $('error').hidden = false;
+  }
+
+  var toastTimer = null;
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.hidden = false;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, 2600);
+  }
+
+  function errorText(code) {
+    switch (code) {
+      case 'full':            return '満員になりました';
+      case 'closed':          return '受付は終了しています';
+      case 'not_found':       return 'このイベントは見つかりません';
+      case 'busy':            return '混み合っています。もう一度お試しください';
+      case 'already_applied': return 'すでに申し込み済みです';
+      case 'invalid_token':   return 'ログインし直してください';
+      case 'server_error':    return 'サーバーでエラーが発生しました';
+      default:                return 'エラーが発生しました (' + code + ')';
+    }
+  }
+</script>
+</body>
+</html>
