@@ -195,6 +195,10 @@
   .picklist button:active { background: #f2f4f6; }
   .picklist .sub { display: block; font-size: 12px; color: var(--muted); }
 
+  /* 代理追加の1人分 */
+  .person { padding-top: 4px; }
+  .person + .person { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+
   /* ---- トースト ---- */
   .toast {
     position: fixed; left: 50%; z-index: 30;
@@ -541,6 +545,13 @@
       var copy = el('button', 'btn sub', '名簿をコピー');
       copy.addEventListener('click', function () { copyRoster(ev); });
       card.appendChild(copy);
+
+      // 幹事の個人LINEに参加連絡が来たとき用。終了した回には出さない
+      if (!ev.is_over) {
+        var add = el('button', 'btn sub', '参加者を追加');
+        add.addEventListener('click', function () { openAddEntry(ev); });
+        card.appendChild(add);
+      }
     }
 
     if (opts.actions) {
@@ -616,6 +627,93 @@
     m.body.appendChild(ta);
     m.addActions([{ label: '閉じる', cls: 'cancel', on: closeModal }]);
     setTimeout(function () { try { ta.setSelectionRange(0, text.length); } catch (e) {} }, 0);
+  }
+
+  // ---- 代理追加（要件 7-3） ----
+
+  /**
+   * 参加者を代理で追加する。名前は自由入力で、まとめて複数人ぶん入れられる。
+   * 同じ名前のメンバーがいればその人として、いなければ新しく登録して追加する。
+   */
+  function openAddEntry(ev) {
+    var m = openModal('参加者を追加');
+    m.body.appendChild(el('p', null,
+      '幹事が代理で申し込みます。本人への通知は届かないので、返事は幹事から伝えてください。'));
+
+    var list = el('div');
+    m.body.appendChild(list);
+
+    var fields = [];
+    function addRow(focus) {
+      if (fields.length >= 10) return;
+      var wrap = el('div', 'person');
+      var fName = field('名前', 'text', '');
+      var fComment = field('備考（任意）', 'text', '');
+      fComment.input.maxLength = 100;
+      wrap.appendChild(fName.wrap);
+      wrap.appendChild(fComment.wrap);
+      list.appendChild(wrap);
+      fields.push({ name: fName.input, comment: fComment.input });
+      if (focus) fName.input.focus();
+    }
+    addRow(false);
+
+    var more = el('button', 'btn sub', '＋ もう1人');
+    more.addEventListener('click', function () {
+      addRow(true);
+      if (fields.length >= 10) more.hidden = true;
+    });
+    m.body.appendChild(more);
+
+    m.body.appendChild(el('p', null,
+      '同じ名前のメンバーがいればその人として追加します。いなければ新しく登録します。'));
+
+    m.addActions([
+      { label: 'やめる', cls: 'cancel', on: closeModal },
+      { label: '追加する', cls: 'ok', on: function (btn) {
+          var people = [];
+          fields.forEach(function (f) {
+            if (f.name.value.trim() !== '') {
+              people.push({ name: f.name.value, comment: f.comment.value });
+            }
+          });
+          if (!people.length) { toast('名前を入力してください'); return; }
+
+          btn.disabled = true;
+          api({ action: 'admin_add_entry', event_id: ev.event_id, people: people })
+            .then(function (data) {
+              btn.disabled = false;
+              if (!data.ok) { toast(errorText(data)); return; }
+              closeModal();
+              return refreshCurrent(ev.event_id).then(function () {
+                showAddResult(data);
+              });
+            })
+            .catch(function (err) { btn.disabled = false; toast(msg(err)); });
+        } }
+    ]);
+  }
+
+  /** 追加結果。全員通れば軽く出すだけ。入らなかった人がいれば理由を残す */
+  function showAddResult(data) {
+    var ng = [];
+    (data.results || []).forEach(function (r) { if (!r.ok) ng.push(r); });
+
+    if (!ng.length) {
+      toast(data.added + '人を追加しました');
+      return;
+    }
+
+    var m = openModal('追加できなかった人がいます');
+    if (data.added) m.body.appendChild(el('p', null, data.added + '人は追加しました。'));
+    var ul = el('div', 'picklist');
+    ng.forEach(function (r) {
+      var line = el('div', 'note');
+      line.textContent = r.name + '：' + errorText({ error: r.error });
+      ul.appendChild(line);
+    });
+    m.body.appendChild(ul);
+    m.addActions([{ label: '閉じる', cls: 'cancel', on: closeModal }]);
   }
 
   // ---- 中止・キャンセル ----
@@ -1117,6 +1215,9 @@
       case 'duplicate_name':   return '同じ表示名のメンバーがすでにいます';
       case 'last_admin':       return '幹事が0人になるため変更できません';
       case 'already_canceled': return 'すでにキャンセル済みです';
+      case 'already_applied':  return 'すでに参加者に入っています';
+      case 'full':             return '満員です（定員を変えるか、スプレッドシートで調整してください）';
+      case 'event_over':       return '終了したイベントには追加できません';
       case 'not_found':        return '対象が見つかりません（画面を更新してください）';
       case 'busy':             return '混み合っています。もう一度お試しください';
       case 'invalid_token':    return 'ログインし直してください';
