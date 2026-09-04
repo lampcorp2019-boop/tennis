@@ -5,7 +5,7 @@
 <!-- 静的ホスティングではGASの addMetaTag が効かないので、ここに必ず持たせる。
      これが無いとスマホが幅980pxのPCサイトとみなして全体を縮小表示する。 -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>テニス 出欠 管理</title>
+<title>SPOT イベント管理</title>
 <style>
   :root {
     --bg: #f4f5f7;
@@ -216,7 +216,7 @@
 <header>
   <button class="hbtn" id="backBtn" hidden>戻る</button>
   <div class="grow">
-    <h1 id="title">テニス 出欠 管理</h1>
+    <h1 id="title">SPOT イベント管理</h1>
     <div class="who" id="who"></div>
   </div>
   <button class="hbtn plus" id="addBtn" hidden title="新規登録">＋</button>
@@ -443,7 +443,7 @@
 
   // ---- 描画: 今日 ----
   function renderToday() {
-    var v = showView('viewToday', 'テニス 出欠 管理');
+    var v = showView('viewToday', 'SPOT イベント管理');
     var data = state.home;
 
     if (!data.event) {
