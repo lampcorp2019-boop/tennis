@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<!-- 静的ホスティングではGASの addMetaTag が効かないので、ここに必ず持たせる。
+     これが無いとスマホが幅980pxのPCサイトとみなして全体を縮小表示する。 -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>テニス 出欠 管理</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --text: #1c1e21;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #06c755;      /* LINE green */
+    --accent-press: #05a648;
+    --full: #9ca3af;
+    --danger: #d93025;
+    --tabbar: 58px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    font-size: 16px; line-height: 1.5;
+  }
+
+  header {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px calc(12px + env(safe-area-inset-top));
+    background: var(--card); border-bottom: 1px solid var(--line);
+  }
+  header .grow { flex: 1; min-width: 0; }
+  header h1 { margin: 0; font-size: 16px; font-weight: 700; }
+  header .who {
+    font-size: 12px; color: var(--muted); margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .hbtn {
+    flex: none; border: 1px solid var(--line); background: #fff; color: var(--text);
+    border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer;
+  }
+  .hbtn.plus { font-size: 20px; line-height: 1; padding: 6px 13px; font-weight: 700; }
+
+  main {
+    padding: 12px 14px;
+    padding-bottom: calc(var(--tabbar) + 24px + env(safe-area-inset-bottom));
+  }
+
+  /* ---- タブバー ---- */
+  nav.tabs {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    display: flex; background: var(--card); border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  nav.tabs button {
+    flex: 1; border: 0; background: none; cursor: pointer;
+    padding: 10px 4px; height: var(--tabbar);
+    font-size: 12px; color: var(--muted); font-family: inherit;
+  }
+  nav.tabs button .ico { display: block; font-size: 18px; line-height: 1.3; }
+  nav.tabs button.on { color: var(--accent); font-weight: 700; }
+
+  /* ---- カード ---- */
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 12px;
+  }
+  .card.tap { cursor: pointer; }
+  .card.tap:active { background: #fafbfc; }
+  .card.off { opacity: .68; }
+  .date { font-size: 18px; font-weight: 700; letter-spacing: .01em; }
+  .date.sm { font-size: 16px; }
+  .place { font-size: 14px; color: var(--muted); margin-top: 2px; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 6px; white-space: pre-wrap; }
+  .count { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; font-size: 15px; }
+  .count b { font-size: 20px; font-weight: 700; }
+
+  .tag {
+    font-size: 12px; font-weight: 700; color: #fff; background: var(--full);
+    border-radius: 999px; padding: 2px 10px; white-space: nowrap;
+  }
+  .tag.full   { background: var(--full); }
+  .tag.hidden-ev { background: var(--danger); }
+  .tag.over   { background: #b0b6bd; }
+  .tag.role   { background: #2563eb; }
+  .tag.unlink { background: #f59e0b; }
+
+  /* ---- 参加者リスト ---- */
+  ol.roster { list-style: none; margin: 12px 0 0; padding: 0; }
+  ol.roster li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0; border-top: 1px solid var(--line);
+  }
+  ol.roster .no { flex: none; width: 24px; color: var(--muted); font-size: 14px; }
+  ol.roster .nm { flex: 1; min-width: 0; }
+  ol.roster .nm .cm { display: block; font-size: 12px; color: var(--muted); }
+  ol.roster .x {
+    flex: none; border: 1px solid var(--line); background: #fff; color: var(--danger);
+    border-radius: 8px; padding: 6px 10px; font-size: 12px; cursor: pointer;
+  }
+  .roster-empty { margin-top: 12px; color: var(--muted); font-size: 14px; }
+
+  /* ---- ボタン ---- */
+  .btn {
+    display: block; width: 100%; margin-top: 12px;
+    border: 0; border-radius: 10px; padding: 13px;
+    font-size: 16px; font-weight: 700; color: #fff; background: var(--accent);
+    cursor: pointer; font-family: inherit;
+  }
+  .btn:active { background: var(--accent-press); }
+  .btn[disabled] { background: #dcdfe3; color: #9aa0a6; cursor: default; }
+  .btn.sub { background: #fff; color: var(--text); border: 1px solid var(--line); }
+  .btn.sub:active { background: #f2f4f6; }
+  .btn.danger { background: #fff; color: var(--danger); border: 1px solid var(--line); }
+
+  .row2 { display: flex; gap: 10px; }
+  .row2 .btn { flex: 1; }
+
+  /* ---- 折りたたみ ---- */
+  .fold {
+    width: 100%; border: 1px solid var(--line); background: #fff; color: var(--muted);
+    border-radius: 10px; padding: 11px; font-size: 14px; cursor: pointer;
+    margin-bottom: 12px; font-family: inherit;
+  }
+  .section-label {
+    font-size: 12px; color: var(--muted); font-weight: 700;
+    margin: 4px 2px 8px; letter-spacing: .04em;
+  }
+
+  /* ---- フォーム ---- */
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
+  .field input[type=text], .field input[type=date], .field input[type=time],
+  .field input[type=number], .field textarea {
+    display: block; width: 100%;
+    border: 1px solid var(--line); border-radius: 8px; padding: 11px;
+    /* iOSは16px未満の入力欄にフォーカスすると勝手に拡大するので16pxを下回らせない */
+    font: inherit; font-size: 16px; color: var(--text); background: #fff;
+  }
+  .field input:disabled { background: #f2f4f6; color: var(--muted); }
+  .field .hint { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  .switch { display: flex; align-items: center; gap: 10px; }
+  .switch input { width: 20px; height: 20px; }
+
+  /* ---- 状態表示 ---- */
+  .state { padding: 40px 16px; text-align: center; color: var(--muted); font-size: 14px; }
+  .state.error { color: var(--danger); }
+  #errorMsg, #forbidMsg {
+    white-space: pre-wrap; text-align: left; font-size: 13px; line-height: 1.7;
+    word-break: break-all;
+  }
+  .state .retry {
+    margin-top: 14px; border: 1px solid var(--line); background: #fff; color: var(--text);
+    border-radius: 8px; padding: 9px 18px; font-size: 14px; cursor: pointer;
+    font-family: inherit;
+  }
+
+  /* ---- モーダル ---- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 20;
+    background: rgba(0,0,0,.45);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal {
+    background: #fff; border-radius: 14px; padding: 20px;
+    width: 100%; max-width: 360px; max-height: 82vh; overflow: auto;
+  }
+  .modal h2 { margin: 0 0 6px; font-size: 17px; }
+  .modal p { margin: 6px 0 0; font-size: 14px; color: var(--muted); }
+  .modal .m-actions { display: flex; gap: 10px; margin-top: 18px; }
+  .modal .m-actions button {
+    flex: 1; border-radius: 10px; padding: 12px; font-size: 15px; font-weight: 700;
+    border: 0; cursor: pointer; font-family: inherit;
+  }
+  .modal .cancel { background: #eef0f2; color: var(--text); }
+  .modal .ok { background: var(--accent); color: #fff; }
+  .modal .ok.danger { background: var(--danger); }
+  .modal .ok[disabled] { background: #dcdfe3; color: #9aa0a6; }
+  .modal textarea.copy {
+    width: 100%; height: 200px; margin-top: 10px;
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+    font: inherit; font-size: 14px; background: #fff; resize: none;
+  }
+  .picklist { margin-top: 10px; }
+  .picklist button {
+    display: block; width: 100%; text-align: left;
+    border: 1px solid var(--line); background: #fff; color: var(--text);
+    border-radius: 10px; padding: 11px 12px; margin-bottom: 8px;
+    font: inherit; font-size: 14px; cursor: pointer;
+  }
+  .picklist button:active { background: #f2f4f6; }
+  .picklist .sub { display: block; font-size: 12px; color: var(--muted); }
+
+  /* ---- トースト ---- */
+  .toast {
+    position: fixed; left: 50%; z-index: 30;
+    bottom: calc(var(--tabbar) + 20px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    background: rgba(28,30,33,.94); color: #fff;
+    padding: 12px 20px; border-radius: 999px; font-size: 14px; max-width: 88vw;
+    text-align: center;
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <button class="hbtn" id="backBtn" hidden>戻る</button>
+  <div class="grow">
+    <h1 id="title">テニス 出欠 管理</h1>
+    <div class="who" id="who"></div>
+  </div>
+  <button class="hbtn plus" id="addBtn" hidden title="新規登録">＋</button>
+  <button class="hbtn" id="reloadBtn" hidden>更新</button>
+</header>
+
+<main>
+  <div class="state" id="loading">読み込み中…</div>
+
+  <div class="state error" id="error" hidden>
+    <div id="errorMsg"></div>
+    <button class="retry" id="retryBtn">再読み込み</button>
+  </div>
+
+  <div class="state error" id="forbidden" hidden>
+    <div id="forbidMsg">権限がありません。この画面は幹事のみが使えます。</div>
+  </div>
+
+  <div id="viewToday"   hidden></div>
+  <div id="viewEvents"  hidden></div>
+  <div id="viewMembers" hidden></div>
+  <div id="viewDetail"  hidden></div>
+  <div id="viewForm"    hidden></div>
+</main>
+
+<nav class="tabs" id="tabs" hidden>
+  <button data-tab="today"><span class="ico">📋</span>今日</button>
+  <button data-tab="events"><span class="ico">🗓</span>イベント</button>
+  <button data-tab="members"><span class="ico">👥</span>メンバー</button>
+</nav>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="modal" id="modal"></div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+  var LIFF_ID = '2011405641-Q5Q0jNSE';
+  var API_URL = 'https://script.google.com/macros/s/AKfycbzhNDVfGHZtk9w0WCwiBZMBN52vXwRSLR6AGt42sDGrQh7OxcMB62eRuHp00SXmTZwZ/exec';
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  // 画面の状態。取得したデータは「今表示しているもの」だけを持つ。
+  // 通信に失敗したときに古い名簿を出さないため、失敗したら必ず捨てる（要件 3.1）。
+  var state = {
+    tab: 'today',
+    home: null,        // admin_home の結果
+    events: null,      // admin_events の結果
+    members: null,     // admin_members の結果
+    detail: null,      // 表示中のイベント詳細
+    me: null
+  };
+
+  // どこで止まったかを画面に出す。無言で「読み込み中」のまま固まらせない。
+  var stage = '起動中';
+  var watchdog = null;
+
+  function setStage(s) {
+    stage = s;
+    var el = $('loading');
+    if (el && !el.hidden) el.textContent = s + '…';
+  }
+  function armWatchdog() {
+    clearWatchdog();
+    watchdog = setTimeout(function () {
+      showError('応答がありません。\n\n止まった段階: ' + stage +
+                '\n通信方式: ' + transportName() +
+                '\n接続先: ' + (API_URL || '(未設定)'));
+    }, 20000);
+  }
+  function clearWatchdog() {
+    if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+  }
+  function msg(err) {
+    if (!err) return '(詳細不明)';
+    return err.message || err.toString() || String(err);
+  }
+
+  window.addEventListener('error', function (ev) {
+    showError('[' + stage + '] スクリプトエラー\n' + (ev.message || ''));
+  });
+  window.addEventListener('unhandledrejection', function (ev) {
+    showError('[' + stage + '] 未処理のエラー\n' + msg(ev.reason));
+  });
+
+  // ---- 起動 ----
+  boot();
+
+  function boot() {
+    if (typeof liff === 'undefined') {
+      showError('LIFF SDKを読み込めませんでした。通信環境を確認してください。');
+      return;
+    }
+    if (!LIFF_ID) { showError('LIFF_ID が設定されていません。'); return; }
+
+    setStage('LIFFを初期化中');
+    armWatchdog();
+
+    liff.init({ liffId: LIFF_ID })
+      .then(function () {
+        setStage('ログインを確認中');
+        if (!liff.isLoggedIn()) {
+          setStage('LINEログインへ移動します');
+          liff.login();
+          return null;
+        }
+        if (!liff.getIDToken()) {
+          setStage('IDトークンを取得できません（openidスコープ未付与の可能性）');
+          liff.login();
+          return null;
+        }
+        return loadToday();
+      })
+      .catch(function (err) {
+        showError('[' + stage + '] LIFFの初期化に失敗しました。\n' + msg(err));
+      });
+  }
+
+  // ---- API ----
+  function useGasBridge() {
+    return typeof google !== 'undefined' && google.script && google.script.run;
+  }
+  function transportName() {
+    return useGasBridge() ? 'google.script.run' : 'fetch';
+  }
+
+  function api(payload) {
+    var idToken = liff.getIDToken();
+    if (!idToken) {
+      liff.login();
+      return Promise.reject(new Error('ログインが必要です（IDトークンが取得できません）'));
+    }
+    payload.idToken = idToken;
+
+    if (useGasBridge()) {
+      return new Promise(function (resolve, reject) {
+        google.script.run
+          .withSuccessHandler(function (s) {
+            try { resolve(JSON.parse(s)); }
+            catch (e) { reject(new Error('応答を解釈できません: ' + String(s).slice(0, 200))); }
+          })
+          .withFailureHandler(function (e) {
+            reject(new Error('サーバー処理でエラー: ' + msg(e)));
+          })
+          .apiCall(JSON.stringify(payload));
+      });
+    }
+
+    if (!API_URL) return Promise.reject(new Error('API_URL が未設定です'));
+
+    return fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      if (!res.ok) throw new Error('サーバーエラー (HTTP ' + res.status + ')');
+      return res.json();
+    });
+  }
+
+  /**
+   * 画面全体を差し替える取得。失敗したら中身を消す（古い人数を残さない）。
+   * onOk が false を返したら描画は呼び出し側に任せる。
+   */
+  function fetchInto(label, payload, onOk) {
+    showLoading(label);
+    setStage(label);
+    armWatchdog();
+    return api(payload)
+      .then(function (data) {
+        clearWatchdog();
+        if (!data.ok) {
+          if (data.error === 'invalid_token') { liff.login(); return; }
+          if (data.error === 'forbidden') { showForbidden(); return; }
+          throw new Error(errorText(data));
+        }
+        onOk(data);
+      })
+      .catch(function (err) { showError('[' + stage + ']\n' + msg(err)); });
+  }
+
+  // ---- 読み込み ----
+  function loadToday() {
+    state.tab = 'today';
+    return fetchInto('本日の参加者を取得中', { action: 'admin_home' }, function (data) {
+      state.home = data;
+      setMe(data.me);
+      renderToday();
+    });
+  }
+
+  function loadEvents() {
+    state.tab = 'events';
+    return fetchInto('イベントを取得中', { action: 'admin_events' }, function (data) {
+      state.events = data;
+      setMe(data.me);
+      renderEvents();
+    });
+  }
+
+  function loadMembers() {
+    state.tab = 'members';
+    return fetchInto('メンバーを取得中', { action: 'admin_members' }, function (data) {
+      state.members = data;
+      renderMembers();
+    });
+  }
+
+  function openDetail(eventId) {
+    return fetchInto('イベントを取得中', { action: 'admin_event', event_id: eventId },
+      function (data) {
+        state.detail = data.event;
+        renderDetail();
+      });
+  }
+
+  function setMe(me) {
+    if (!me) return;
+    state.me = me;
+    $('who').textContent = me.name ? me.name + ' さん（幹事）' : '幹事';
+  }
+
+  // ---- 描画: 今日 ----
+  function renderToday() {
+    var v = showView('viewToday', 'テニス 出欠 管理');
+    var data = state.home;
+
+    if (!data.event) {
+      v.appendChild(stateBox('予定されているイベントはありません。',
+                             '「イベント」タブの ＋ から登録できます。'));
+      return;
+    }
+
+    if (data.mode === 'next') {
+      v.appendChild(stateBox('本日の予定はありません。', '次回の開催を表示しています。'));
+    }
+    v.appendChild(eventCard(data.event, { detail: true }));
+  }
+
+  // ---- 描画: イベント一覧 ----
+  function renderEvents() {
+    var v = showView('viewEvents', 'イベント');
+    var data = state.events;
+
+    var lab = el('div', 'section-label', 'これからの予定');
+    v.appendChild(lab);
+
+    if (!data.upcoming.length) {
+      v.appendChild(stateBox('これからの予定はありません。'));
+    } else {
+      data.upcoming.forEach(function (ev) {
+        v.appendChild(eventCard(ev, { tap: true }));
+      });
+    }
+
+    if (!data.past.length) return;
+
+    // 過去はほとんど見ないので既定は折りたたみ（要件 3.2）
+    var fold = el('button', 'fold', '過去の開催を見る（直近' + data.past.length + '件）');
+    var box = el('div');
+    box.hidden = true;
+    fold.addEventListener('click', function () {
+      box.hidden = !box.hidden;
+      fold.textContent = box.hidden
+        ? '過去の開催を見る（直近' + data.past.length + '件）'
+        : '過去の開催を閉じる';
+    });
+    data.past.forEach(function (ev) { box.appendChild(eventCard(ev, { tap: true })); });
+
+    v.appendChild(fold);
+    v.appendChild(box);
+    v.appendChild(el('div', 'note',
+      'これより前の記録はスプレッドシートで確認してください。'));
+  }
+
+  // ---- 描画: イベント詳細 ----
+  function renderDetail() {
+    var ev = state.detail;
+    var v = showView('viewDetail', 'イベント詳細');
+    v.appendChild(eventCard(ev, { detail: true, actions: true }));
+  }
+
+  /**
+   * イベント1件のカード。
+   *  opts.tap     … タップで詳細へ
+   *  opts.detail  … 参加者一覧と名簿コピーを出す
+   *  opts.actions … 編集・中止ボタンを出す
+   */
+  function eventCard(ev, opts) {
+    opts = opts || {};
+    var card = el('div', 'card' + (opts.tap ? ' tap' : '') + (ev.published ? '' : ' off'));
+
+    var head = el('div', 'date', formatDate(ev.date, ev.weekday) + ' ' + timeRange(ev));
+    card.appendChild(head);
+
+    if (ev.place) card.appendChild(el('div', 'place', ev.place));
+
+    var count = el('div', 'count');
+    var b = el('b');
+    if (ev.capacity === null || ev.capacity === undefined) {
+      count.appendChild(document.createTextNode('参加'));
+      b.textContent = ev.confirmed + '名';
+      count.appendChild(b);
+    } else {
+      b.textContent = ev.confirmed + ' / ' + ev.capacity;
+      count.appendChild(b);
+      count.appendChild(document.createTextNode('名'));
+      if (ev.is_full) count.appendChild(el('span', 'tag full', '満員'));
+    }
+    if (!ev.published) count.appendChild(el('span', 'tag hidden-ev', '非公開'));
+    if (ev.is_over)    count.appendChild(el('span', 'tag over', '終了'));
+    card.appendChild(count);
+
+    if (ev.note) card.appendChild(el('div', 'note', ev.note));
+
+    if (opts.tap) {
+      card.addEventListener('click', function () { openDetail(ev.event_id); });
+      return card;
+    }
+
+    if (opts.detail) {
+      card.appendChild(rosterList(ev));
+
+      var copy = el('button', 'btn sub', '名簿をコピー');
+      copy.addEventListener('click', function () { copyRoster(ev); });
+      card.appendChild(copy);
+    }
+
+    if (opts.actions) {
+      var row = el('div', 'row2');
+      var edit = el('button', 'btn sub', '編集');
+      edit.addEventListener('click', function () { openForm(ev); });
+      row.appendChild(edit);
+
+      var pub = el('button', 'btn ' + (ev.published ? 'danger' : 'sub'),
+                   ev.published ? '中止にする' : '再公開する');
+      pub.addEventListener('click', function () { confirmPublish(ev); });
+      row.appendChild(pub);
+      card.appendChild(row);
+    }
+    return card;
+  }
+
+  /** 参加者一覧（申込順・連番つき） */
+  function rosterList(ev) {
+    var ps = ev.participants || [];
+    if (!ps.length) return el('div', 'roster-empty', 'まだ申込はありません。');
+
+    var ol = el('ol', 'roster');
+    ps.forEach(function (p, i) {
+      var li = el('li');
+      li.appendChild(el('span', 'no', (i + 1) + '.'));
+
+      var nm = el('div', 'nm');
+      nm.appendChild(document.createTextNode(p.name));
+      if (p.comment) nm.appendChild(el('span', 'cm', p.comment));
+      li.appendChild(nm);
+
+      var x = el('button', 'x', 'キャンセル');
+      x.addEventListener('click', function () { confirmCancel(ev, p); });
+      li.appendChild(x);
+
+      ol.appendChild(li);
+    });
+    return ol;
+  }
+
+  // ---- 名簿コピー（要件 6） ----
+  function rosterText(ev) {
+    var lines = [];
+    lines.push(formatDate(ev.date, ev.weekday) + ' ' + timeRange(ev) +
+               (ev.place ? ' ' + ev.place : ''));
+    lines.push('参加 ' + ev.confirmed + '名');
+    lines.push('');
+    (ev.participants || []).forEach(function (p, i) {
+      lines.push((i + 1) + '. ' + p.name + (p.comment ? '（' + p.comment + '）' : ''));
+    });
+    return lines.join('\n');
+  }
+
+  function copyRoster(ev) {
+    var text = rosterText(ev);
+    // LINE内ブラウザでは navigator.clipboard が使えないことがある（要件 7-5）
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(function () { toast('名簿をコピーしました'); })
+        .catch(function () { copyFallback(text); });
+      return;
+    }
+    copyFallback(text);
+  }
+
+  function copyFallback(text) {
+    var m = openModal('コピーできませんでした');
+    m.body.appendChild(el('p', null, '下のテキストを長押しして選択・コピーしてください。'));
+    var ta = el('textarea', 'copy');
+    ta.value = text;
+    ta.readOnly = true;
+    m.body.appendChild(ta);
+    m.addActions([{ label: '閉じる', cls: 'cancel', on: closeModal }]);
+    setTimeout(function () { try { ta.setSelectionRange(0, text.length); } catch (e) {} }, 0);
+  }
+
+  // ---- 中止・キャンセル ----
+  function confirmPublish(ev) {
+    var toPublish = !ev.published;
+    var m = openModal(toPublish ? '再公開しますか？' : '中止にしますか？');
+    m.body.appendChild(el('p', null,
+      formatDate(ev.date, ev.weekday) + ' ' + timeRange(ev)));
+    m.body.appendChild(el('p', null, toPublish
+      ? '利用者の一覧に再び表示されます。'
+      : '利用者の一覧から消えます。参加者への連絡は幹事から行ってください（名簿はこの画面に残ります）。'));
+
+    m.addActions([
+      { label: 'やめる', cls: 'cancel', on: closeModal },
+      { label: toPublish ? '再公開する' : '中止にする',
+        cls: 'ok' + (toPublish ? '' : ' danger'),
+        on: function (btn) {
+          btn.disabled = true;
+          api({ action: 'admin_set_published', event_id: ev.event_id, published: toPublish })
+            .then(function (data) {
+              closeModal();
+              if (!data.ok) { toast(errorText(data)); return; }
+              toast(toPublish ? '再公開しました' : '中止にしました');
+              return openDetail(ev.event_id);
+            })
+            .catch(function (err) { closeModal(); toast(msg(err)); });
+        } }
+    ]);
+  }
+
+  function confirmCancel(ev, p) {
+    // 復活はできない操作なので、必ず名前を出して確かめる（要件 7-2 / 3.3）
+    var m = openModal('申込をキャンセルします');
+    m.body.appendChild(el('p', null, p.name + ' さん'));
+    m.body.appendChild(el('p', null,
+      'この操作は管理画面からは取り消せません。よろしいですか？'));
+
+    m.addActions([
+      { label: 'やめる', cls: 'cancel', on: closeModal },
+      { label: 'キャンセルする', cls: 'ok danger', on: function (btn) {
+          btn.disabled = true;
+          api({ action: 'admin_cancel_entry', entry_id: p.entry_id })
+            .then(function (data) {
+              closeModal();
+              if (!data.ok) { toast(errorText(data)); return; }
+              toast('キャンセルしました');
+              return refreshCurrent(ev.event_id);
+            })
+            .catch(function (err) { closeModal(); toast(msg(err)); });
+        } }
+    ]);
+  }
+
+  /** 詳細から操作したら詳細を、今日タブから操作したら今日タブを取り直す */
+  function refreshCurrent(eventId) {
+    if (!$('viewDetail').hidden) return openDetail(eventId);
+    return loadToday();
+  }
+
+  // ---- イベント登録フォーム ----
+  var formMode = 'new';        // new | edit
+  var formEventId = '';
+
+  /** ＋ を押したときの入口。主動線は「前回のコピー」（要件 3.4） */
+  function openNewChooser() {
+    var m = openModal('イベントの登録');
+    m.body.appendChild(el('p', null, '前回と同じ内容なら、複製が早いです。'));
+
+    var list = el('div', 'picklist');
+    var dup = el('button');
+    dup.appendChild(document.createTextNode('過去のイベントから複製'));
+    dup.appendChild(el('span', 'sub', '日付以外が埋まった状態で開きます'));
+    dup.addEventListener('click', openDuplicatePicker);
+    list.appendChild(dup);
+
+    var neu = el('button');
+    neu.appendChild(document.createTextNode('新規で作成'));
+    neu.appendChild(el('span', 'sub', '空のフォームを開きます'));
+    neu.addEventListener('click', function () { closeModal(); openForm(null); });
+    list.appendChild(neu);
+
+    m.body.appendChild(list);
+    m.addActions([{ label: '閉じる', cls: 'cancel', on: closeModal }]);
+  }
+
+  function openDuplicatePicker() {
+    var data = state.events;
+    if (!data) { closeModal(); toast('イベントを読み込んでから操作してください'); return; }
+
+    // 新しい順に並べる（直近の回をコピーすることがほとんど）
+    var all = data.past.concat(data.upcoming).sort(function (a, b) {
+      return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0);
+    });
+    if (!all.length) { closeModal(); openForm(null); return; }
+
+    var m = openModal('複製元を選ぶ');
+    var list = el('div', 'picklist');
+    all.slice(0, 20).forEach(function (ev) {
+      var b = el('button');
+      b.appendChild(document.createTextNode(
+        formatDate(ev.date, ev.weekday) + ' ' + timeRange(ev)));
+      b.appendChild(el('span', 'sub',
+        (ev.place || '場所なし') + ' / 定員 ' +
+        (ev.capacity === null ? 'なし' : ev.capacity + '名')));
+      b.addEventListener('click', function () {
+        closeModal();
+        openForm(ev, true);      // 日付以外を引き継ぐ
+      });
+      list.appendChild(b);
+    });
+    m.body.appendChild(list);
+    m.addActions([{ label: '閉じる', cls: 'cancel', on: closeModal }]);
+  }
+
+  /**
+   * ev = null で新規、ev ありで編集。duplicate = true なら「複製」（日付を空で新規）。
+   */
+  function openForm(ev, duplicate) {
+    formMode = (ev && !duplicate) ? 'edit' : 'new';
+    formEventId = formMode === 'edit' ? ev.event_id : '';
+
+    var v = showView('viewForm',
+      formMode === 'edit' ? 'イベントを編集' : 'イベントを登録');
+
+    var card = el('div', 'card');
+
+    var fDate = field('日付', 'date', formMode === 'edit' ? ev.date : '');
+    if (formMode === 'edit') {
+      fDate.input.disabled = true;
+      fDate.wrap.appendChild(el('div', 'hint',
+        '日付は変更できません。延期する場合は「中止にする」→ 新しい日付で登録してください。'));
+    } else {
+      fDate.input.min = todayISO();
+      fDate.wrap.appendChild(el('div', 'hint', '過去の日付では登録できません。'));
+    }
+    card.appendChild(fDate.wrap);
+
+    var fStart = field('開始時刻', 'time', ev ? ev.start_time : '');
+    card.appendChild(fStart.wrap);
+
+    var fEnd = field('終了時刻（任意）', 'time', ev && ev.end_time ? ev.end_time : '');
+    card.appendChild(fEnd.wrap);
+
+    var fPlace = field('場所（任意）', 'text', ev ? ev.place : '');
+    card.appendChild(fPlace.wrap);
+
+    var fCap = field('定員', 'number',
+      ev && ev.capacity !== null && ev.capacity !== undefined ? String(ev.capacity) : '');
+    fCap.input.min = '1';
+    fCap.input.step = '1';
+    fCap.input.inputMode = 'numeric';
+    fCap.wrap.appendChild(el('div', 'hint', '空欄にすると定員なし（無制限）になります。'));
+    card.appendChild(fCap.wrap);
+
+    var fNote = field('備考（任意）', 'text', ev ? ev.note : '');
+    fNote.wrap.appendChild(el('div', 'hint', '利用者の一覧にも表示されます。'));
+    card.appendChild(fNote.wrap);
+
+    var pubWrap = el('div', 'field');
+    var sw = el('label', 'switch');
+    var cb = el('input');
+    cb.type = 'checkbox';
+    cb.checked = ev ? !!ev.published : true;      // 既定は公開
+    sw.appendChild(cb);
+    sw.appendChild(document.createTextNode('公開する（利用者の一覧に出す）'));
+    pubWrap.appendChild(sw);
+    card.appendChild(pubWrap);
+
+    var save = el('button', 'btn', formMode === 'edit' ? '保存する' : '登録する');
+    save.addEventListener('click', function () {
+      save.disabled = true;
+      var payload = {
+        action: 'admin_save_event',
+        event_id: formEventId,
+        event: {
+          date:       formMode === 'edit' ? ev.date : fDate.input.value,
+          start_time: fStart.input.value,
+          end_time:   fEnd.input.value,
+          place:      fPlace.input.value,
+          capacity:   fCap.input.value,
+          note:       fNote.input.value,
+          published:  cb.checked
+        }
+      };
+      api(payload)
+        .then(function (data) {
+          save.disabled = false;
+          if (!data.ok) { toast(errorText(data)); return; }
+          toast(formMode === 'edit' ? '保存しました' : '登録しました');
+          return openDetail(data.event_id);
+        })
+        .catch(function (err) { save.disabled = false; toast(msg(err)); });
+    });
+    card.appendChild(save);
+
+    var back = el('button', 'btn sub', 'やめる');
+    back.addEventListener('click', function () { loadEvents(); });
+    card.appendChild(back);
+
+    v.appendChild(card);
+  }
+
+  function field(label, type, value) {
+    var wrap = el('div', 'field');
+    wrap.appendChild(el('label', null, label));
+    var input = el('input');
+    input.type = type;
+    input.value = value || '';
+    if (type === 'text') input.maxLength = 200;
+    wrap.appendChild(input);
+    return { wrap: wrap, input: input };
+  }
+
+  // ---- 描画: メンバー ----
+  function renderMembers() {
+    var v = showView('viewMembers', 'メンバー');
+    var data = state.members;
+
+    var add = el('button', 'btn sub', 'メンバーを事前登録する');
+    add.addEventListener('click', openAddMember);
+    v.appendChild(add);
+
+    v.appendChild(el('div', 'section-label',
+      data.members.length + '人（幹事 ' + data.admin_count + '人）'));
+
+    data.members.forEach(function (mb) {
+      var card = el('div', 'card tap');
+
+      var head = el('div', 'date sm', mb.real_name || mb.display_name || mb.member_id);
+      card.appendChild(head);
+
+      var sub = el('div', 'place');
+      sub.textContent = mb.display_name || '(表示名なし)';
+      card.appendChild(sub);
+
+      var tags = el('div', 'count');
+      if (mb.role === 'admin') tags.appendChild(el('span', 'tag role', '幹事'));
+      if (!mb.linked) tags.appendChild(el('span', 'tag unlink', '未紐づけ'));
+      if (tags.childNodes.length) card.appendChild(tags);
+
+      card.addEventListener('click', function () { openEditMember(mb); });
+      v.appendChild(card);
+    });
+
+    v.appendChild(el('div', 'note',
+      '退会（status）の変更はスプレッドシートで行います。'));
+  }
+
+  function openAddMember() {
+    var m = openModal('メンバーの事前登録');
+    m.body.appendChild(el('p', null,
+      'LINEの表示名を先に登録しておくと、本人が初めてアプリを開いたときに自動で紐づきます。'));
+
+    var fDisp = field('LINEの表示名（完全一致）', 'text', '');
+    var fReal = field('本名', 'text', '');
+    m.body.appendChild(fDisp.wrap);
+    m.body.appendChild(fReal.wrap);
+
+    m.addActions([
+      { label: 'やめる', cls: 'cancel', on: closeModal },
+      { label: '登録する', cls: 'ok', on: function (btn) {
+          btn.disabled = true;
+          api({
+            action: 'admin_save_member',
+            display_name: fDisp.input.value,
+            real_name: fReal.input.value
+          })
+            .then(function (data) {
+              btn.disabled = false;
+              if (!data.ok) { toast(errorText(data)); return; }
+              closeModal();
+              toast('登録しました');
+              return loadMembers();
+            })
+            .catch(function (err) { btn.disabled = false; toast(msg(err)); });
+        } }
+    ]);
+  }
+
+  function openEditMember(mb) {
+    var m = openModal(mb.display_name || mb.member_id);
+
+    var fReal = field('本名', 'text', mb.real_name);
+    m.body.appendChild(fReal.wrap);
+
+    var roleWrap = el('div', 'field');
+    var sw = el('label', 'switch');
+    var cb = el('input');
+    cb.type = 'checkbox';
+    cb.checked = mb.role === 'admin';
+    sw.appendChild(cb);
+    sw.appendChild(document.createTextNode('幹事（管理画面を使える）'));
+    roleWrap.appendChild(sw);
+    m.body.appendChild(roleWrap);
+
+    if (!mb.linked) {
+      m.body.appendChild(el('p', null,
+        'まだLINEと紐づいていません。本人がアプリを開くと自動で紐づきます。'));
+    }
+
+    m.addActions([
+      { label: 'やめる', cls: 'cancel', on: closeModal },
+      { label: '保存する', cls: 'ok', on: function (btn) {
+          btn.disabled = true;
+          api({
+            action: 'admin_save_member',
+            member_id: mb.member_id,
+            real_name: fReal.input.value,
+            role: cb.checked ? 'admin' : 'member'
+          })
+            .then(function (data) {
+              btn.disabled = false;
+              if (!data.ok) { toast(errorText(data)); return; }
+              closeModal();
+              toast('保存しました');
+              return loadMembers();
+            })
+            .catch(function (err) { btn.disabled = false; toast(msg(err)); });
+        } }
+    ]);
+  }
+
+  // ---- 画面の切り替え ----
+  var VIEWS = ['viewToday', 'viewEvents', 'viewMembers', 'viewDetail', 'viewForm'];
+
+  function showView(id, title) {
+    clearWatchdog();
+    $('loading').hidden = true;
+    $('error').hidden = true;
+    $('forbidden').hidden = true;
+    $('tabs').hidden = false;
+
+    VIEWS.forEach(function (v) {
+      $(v).hidden = (v !== id);
+      if (v === id) $(v).innerHTML = '';
+    });
+
+    $('title').textContent = title;
+
+    var isSub = (id === 'viewDetail' || id === 'viewForm');
+    $('backBtn').hidden = !isSub;
+    $('addBtn').hidden = (id !== 'viewEvents');
+    $('reloadBtn').hidden = isSub;
+    $('tabs').hidden = isSub;
+
+    // タブの選択状態
+    Array.prototype.forEach.call($('tabs').children, function (b) {
+      b.className = (b.getAttribute('data-tab') === state.tab) ? 'on' : '';
+    });
+
+    window.scrollTo(0, 0);
+    return $(id);
+  }
+
+  function stateBox(text, sub) {
+    var box = el('div', 'card');
+    box.appendChild(el('div', 'place', text));
+    if (sub) box.appendChild(el('div', 'note', sub));
+    return box;
+  }
+
+  function showLoading(label) {
+    VIEWS.forEach(function (v) { $(v).hidden = true; });
+    $('error').hidden = true;
+    $('forbidden').hidden = true;
+    $('loading').hidden = false;
+    $('loading').textContent = (label || stage) + '…';
+  }
+
+  function showError(text) {
+    clearWatchdog();
+    VIEWS.forEach(function (v) { $(v).hidden = true; });
+    $('loading').hidden = true;
+    $('forbidden').hidden = true;
+    $('errorMsg').textContent = text;
+    $('error').hidden = false;
+    $('tabs').hidden = false;
+    $('backBtn').hidden = true;
+    $('addBtn').hidden = true;
+  }
+
+  /** 権限なし。タブも操作もすべて畳む（データは何も届いていない） */
+  function showForbidden() {
+    clearWatchdog();
+    VIEWS.forEach(function (v) { $(v).hidden = true; });
+    $('loading').hidden = true;
+    $('error').hidden = true;
+    $('tabs').hidden = true;
+    $('backBtn').hidden = true;
+    $('addBtn').hidden = true;
+    $('reloadBtn').hidden = true;
+    $('who').textContent = '';
+    $('forbidMsg').textContent =
+      '権限がありません。この画面は幹事のみが使えます。\n\n' +
+      '幹事の方は、スプレッドシートの members シートで自分の行の role を admin にしてください。';
+    $('forbidden').hidden = false;
+  }
+
+  // ---- モーダル ----
+  function openModal(title) {
+    var box = $('modal');
+    box.innerHTML = '';
+    box.appendChild(el('h2', null, title));
+    var body = el('div');
+    box.appendChild(body);
+    $('overlay').hidden = false;
+
+    return {
+      body: body,
+      addActions: function (actions) {
+        var wrap = el('div', 'm-actions');
+        actions.forEach(function (a) {
+          var b = el('button', a.cls, a.label);
+          b.addEventListener('click', function () { a.on(b); });
+          wrap.appendChild(b);
+        });
+        box.appendChild(wrap);
+      }
+    };
+  }
+  function closeModal() { $('overlay').hidden = true; $('modal').innerHTML = ''; }
+
+  $('overlay').addEventListener('click', function (e) {
+    if (e.target === $('overlay')) closeModal();
+  });
+
+  // ---- 操作 ----
+  Array.prototype.forEach.call($('tabs').children, function (b) {
+    b.addEventListener('click', function () {
+      var tab = b.getAttribute('data-tab');
+      if (tab === 'today')   return loadToday();
+      if (tab === 'events')  return loadEvents();
+      if (tab === 'members') return loadMembers();
+    });
+  });
+
+  $('backBtn').addEventListener('click', function () {
+    if (!$('viewForm').hidden && formMode === 'edit') return openDetail(formEventId);
+    if (state.tab === 'today') return loadToday();
+    return loadEvents();
+  });
+
+  $('addBtn').addEventListener('click', openNewChooser);
+
+  $('reloadBtn').addEventListener('click', function () {
+    if (state.tab === 'events')  return loadEvents();
+    if (state.tab === 'members') return loadMembers();
+    return loadToday();
+  });
+
+  $('retryBtn').addEventListener('click', function () {
+    if (state.tab === 'events')  return loadEvents();
+    if (state.tab === 'members') return loadMembers();
+    return loadToday();
+  });
+
+  // ---- 表示ヘルパー ----
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== null && text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function formatDate(iso, weekday) {
+    var p = String(iso).split('-');
+    if (p.length !== 3) return iso;
+    return Number(p[1]) + '/' + Number(p[2]) + '(' + weekday + ')';
+  }
+
+  function timeRange(ev) {
+    return ev.end_time ? ev.start_time + '〜' + ev.end_time : ev.start_time;
+  }
+
+  function todayISO() {
+    var d = new Date();
+    return d.getFullYear() + '-' +
+           ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+           ('0' + d.getDate()).slice(-2);
+  }
+
+  var toastTimer = null;
+  function toast(text) {
+    var t = $('toast');
+    t.textContent = text;
+    t.hidden = false;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, 2800);
+  }
+
+  function errorText(data) {
+    var code = data && data.error;
+    if (data && data.message) return data.message;
+    switch (code) {
+      case 'forbidden':        return '権限がありません（幹事のみ）';
+      case 'duplicate_event':  return 'その日付のイベントはすでに登録されています';
+      case 'past_date':        return '過去の日付では登録できません';
+      case 'date_locked':      return '日付は変更できません。中止して新しい日付で登録してください';
+      case 'duplicate_name':   return '同じ表示名のメンバーがすでにいます';
+      case 'last_admin':       return '幹事が0人になるため変更できません';
+      case 'already_canceled': return 'すでにキャンセル済みです';
+      case 'not_found':        return '対象が見つかりません（画面を更新してください）';
+      case 'busy':             return '混み合っています。もう一度お試しください';
+      case 'invalid_token':    return 'ログインし直してください';
+      case 'invalid_input':    return '入力内容を確認してください';
+      case 'bad_action':       return 'この操作は使えません';
+      case 'server_error':     return 'サーバーでエラーが発生しました';
+      default:                 return 'エラーが発生しました (' + code + ')';
+    }
+  }
+</script>
+</body>
+</html>
