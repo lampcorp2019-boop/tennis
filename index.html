@@ -166,10 +166,12 @@
   var stage = '起動中';
   var watchdog = null;
 
+  // stage は「どこで詰まったか」を出すための内部値。
+  // 画面には出さない（利用者に通信方式や内部の段取りを見せない）。
   function setStage(s) {
     stage = s;
     var el = $('loading');
-    if (el && !el.hidden) el.textContent = s + '…';
+    if (el && !el.hidden) el.textContent = '読み込み中…';
   }
 
   function armWatchdog() {
@@ -329,25 +331,16 @@
         card.appendChild(place);
       }
 
-      var count = document.createElement('div');
-      count.className = 'count';
-      var num = document.createElement('b');
-      if (ev.capacity === null || ev.capacity === undefined) {
-        num.textContent = ev.confirmed + '名';
-        count.appendChild(document.createTextNode('参加'));
-        count.appendChild(num);
-      } else {
-        num.textContent = ev.confirmed + ' / ' + ev.capacity;
-        count.appendChild(num);
-        count.appendChild(document.createTextNode('名'));
-        if (ev.is_full) {
-          var tag = document.createElement('span');
-          tag.className = 'full-tag';
-          tag.textContent = '満員';
-          count.appendChild(tag);
-        }
+      // 人数は出さない（設計書 1節）。満員のときだけ、申し込めない理由として出す
+      if (ev.is_full) {
+        var count = document.createElement('div');
+        count.className = 'count';
+        var tag = document.createElement('span');
+        tag.className = 'full-tag';
+        tag.textContent = '満員';
+        count.appendChild(tag);
+        card.appendChild(count);
       }
-      card.appendChild(count);
 
       if (ev.note) {
         var note = document.createElement('div');
@@ -436,7 +429,7 @@
   // ---- 表示ヘルパー ----
   function showLoading() {
     $('loading').hidden = false;
-    $('loading').textContent = stage + '…';
+    $('loading').textContent = '読み込み中…';
     $('error').hidden = true;
     $('empty').hidden = true;
     $('list').hidden = true;
