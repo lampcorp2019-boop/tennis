@@ -679,17 +679,17 @@
           });
           if (!people.length) { toast('名前を入力してください'); return; }
 
-          btn.disabled = true;
+          busy(btn);
           api({ action: 'admin_add_entry', event_id: ev.event_id, people: people })
             .then(function (data) {
-              btn.disabled = false;
+              unbusy(btn);
               if (!data.ok) { toast(errorText(data)); return; }
               closeModal();
               return refreshCurrent(ev.event_id).then(function () {
                 showAddResult(data);
               });
             })
-            .catch(function (err) { btn.disabled = false; toast(msg(err)); });
+            .catch(function (err) { unbusy(btn); toast(msg(err)); });
         } }
     ]);
   }
@@ -731,7 +731,7 @@
       { label: toPublish ? '再公開する' : '中止にする',
         cls: 'ok' + (toPublish ? '' : ' danger'),
         on: function (btn) {
-          btn.disabled = true;
+          busy(btn);
           api({ action: 'admin_set_published', event_id: ev.event_id, published: toPublish })
             .then(function (data) {
               closeModal();
@@ -754,7 +754,7 @@
     m.addActions([
       { label: 'やめる', cls: 'cancel', on: closeModal },
       { label: 'キャンセルする', cls: 'ok danger', on: function (btn) {
-          btn.disabled = true;
+          busy(btn);
           api({ action: 'admin_cancel_entry', entry_id: p.entry_id })
             .then(function (data) {
               closeModal();
@@ -884,7 +884,7 @@
 
     var save = el('button', 'btn', formMode === 'edit' ? '保存する' : '登録する');
     save.addEventListener('click', function () {
-      save.disabled = true;
+      busy(save);
       var payload = {
         action: 'admin_save_event',
         event_id: formEventId,
@@ -900,12 +900,12 @@
       };
       api(payload)
         .then(function (data) {
-          save.disabled = false;
+          unbusy(save);
           if (!data.ok) { toast(errorText(data)); return; }
           toast(formMode === 'edit' ? '保存しました' : '登録しました');
           return openDetail(data.event_id);
         })
-        .catch(function (err) { save.disabled = false; toast(msg(err)); });
+        .catch(function (err) { unbusy(save); toast(msg(err)); });
     });
     card.appendChild(save);
 
@@ -975,20 +975,20 @@
     m.addActions([
       { label: 'やめる', cls: 'cancel', on: closeModal },
       { label: '登録する', cls: 'ok', on: function (btn) {
-          btn.disabled = true;
+          busy(btn);
           api({
             action: 'admin_save_member',
             display_name: fDisp.input.value,
             real_name: fReal.input.value
           })
             .then(function (data) {
-              btn.disabled = false;
+              unbusy(btn);
               if (!data.ok) { toast(errorText(data)); return; }
               closeModal();
               toast('登録しました');
               return loadMembers();
             })
-            .catch(function (err) { btn.disabled = false; toast(msg(err)); });
+            .catch(function (err) { unbusy(btn); toast(msg(err)); });
         } }
     ]);
   }
@@ -1017,7 +1017,7 @@
     m.addActions([
       { label: 'やめる', cls: 'cancel', on: closeModal },
       { label: '保存する', cls: 'ok', on: function (btn) {
-          btn.disabled = true;
+          busy(btn);
           api({
             action: 'admin_save_member',
             member_id: mb.member_id,
@@ -1025,13 +1025,13 @@
             role: cb.checked ? 'admin' : 'member'
           })
             .then(function (data) {
-              btn.disabled = false;
+              unbusy(btn);
               if (!data.ok) { toast(errorText(data)); return; }
               closeModal();
               toast('保存しました');
               return loadMembers();
             })
-            .catch(function (err) { btn.disabled = false; toast(msg(err)); });
+            .catch(function (err) { unbusy(btn); toast(msg(err)); });
         } }
     ]);
   }
@@ -1171,6 +1171,20 @@
   });
 
   // ---- 表示ヘルパー ----
+  /**
+   * ボタンを「送信中…」にする。応答まで数秒かかるので、押した瞬間に見た目を変える。
+   * 失敗したら unbusy で元の文言に戻す（成功時はモーダルごと閉じるので戻さなくてよい）。
+   */
+  function busy(btn, label) {
+    if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+    btn.textContent = label || '送信中…';
+    btn.disabled = true;
+  }
+  function unbusy(btn) {
+    if (btn.dataset.label) btn.textContent = btn.dataset.label;
+    btn.disabled = false;
+  }
+
   function el(tag, cls, text) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
